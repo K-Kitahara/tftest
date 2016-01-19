@@ -5,3 +5,6 @@ import numpy as np
 import tensorflow as tf
 
 from ae import TFAutoEncoder
+
+class StackedDenoisingAutoEncoder:
+    """stacked denoising auto-encoder"""
