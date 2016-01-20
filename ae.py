@@ -12,8 +12,10 @@ class TFAutoEncoder:
         """initialization"""
         self._hidden_dim = hidden_dim
 
-    def fit(self, iter=1000):
+    def fit(self, input, iter=1000, graph=None, session=None, noising=False):
         """fit this model"""
+        self.build_graph(input, noising, graph, session)
+
         with self.graph.as_default():
             self.init = tf.initialize_all_variables()
             sess = self.sess
@@ -24,8 +26,8 @@ class TFAutoEncoder:
                 sess.run(self.training_op, feed_dict=self.feed_dict)
                 if step % 100 == 0:
                     print(sess.run(self.loss, feed_dict=self.feed_dict))
-                    print(sess.run(self.noise))
-                    print(sess.run(self.mask_noise))
+                    #print(sess.run(self.noise))
+                    #print(sess.run(self.mask_noise))
                     summary_str = sess.run(self.summary_op, feed_dict=self.feed_dict)
                     self.summary_writer.add_summary(summary_str, step)
 
@@ -61,9 +63,10 @@ class TFAutoEncoder:
             train_step = tf.train.GradientDescentOptimizer(0.01).minimize(loss)
         return train_step
 
-    def build_graph(self, input, input_dim, graph=None, noising=False):
+    def build_graph(self, input, noising, graph, session):
         """build a graph"""
-        self._input_dim = input_dim
+        self.input = input
+        self._input_dim = len(input[0])
         self.noising = noising
 
         if graph == None:
@@ -79,13 +82,13 @@ class TFAutoEncoder:
                 self.mask_noise = tf.Variable(tf.ones([self._input_dim]),
                                     trainable=False, name='mask')
 
-            self.input_placeholder = tf.placeholder("float", [None, input_dim],
+            self.input_placeholder = tf.placeholder("float", [None, self._input_dim],
                                             name="input_placeholder")
-            self.supervisor_placeholder = tf.placeholder("float", [None, input_dim],
+            self.supervisor_placeholder = tf.placeholder("float", [None, self._input_dim],
                                             name="supervisor_placeholder")
 
-            self.feed_dict = {self.input_placeholder: input,
-                                self.supervisor_placeholder: input}
+            self.feed_dict = {self.input_placeholder: self.input,
+                                self.supervisor_placeholder: self.input}
 
             self.encoded = self.encode(self.input_placeholder)
             self.reconstructed = self.reconstruct(self.encoded)
@@ -94,22 +97,39 @@ class TFAutoEncoder:
 
             self.summary_op = tf.merge_all_summaries()
 
-            self.sess = tf.Session()
+            if session == None:
+                self.sess = tf.Session()
+            else:
+                self.sess = session
             sess = self.sess
             self.summary_writer = tf.train.SummaryWriter('log', graph_def=sess.graph_def)
 
-    def get_encoded(self, input):
-        with self.graph.as_default():
+            self.init = tf.initialize_all_variables()
             sess = self.sess
-            w = sess.run(self.W)
-            b = sess.run(self.b)
-            encoded = sess.run(tf.sigmoid(input.dot(w) + b))
-            return encoded
+            sess.run(self.init)
+
+    def get_encoded(self, input):
+        input = np.asarray(input)
+        #with self.graph.as_default():
+        sess = self.sess
+        w = sess.run(self.W)
+        b = sess.run(self.b)
+        self.encoded = sess.run(tf.sigmoid(input.dot(w) + b))
+        return self.encoded
 
     def get_reconstructed(self, encoded):
-        with self.graph.as_default():
-            sess = self.sess
-            wt = sess.run(self.Wt)
-            c = sess.run(self.c)
-            reconstructed = sess.run(tf.sigmoid(encoded.dot(wt) + c))
-            return reconstructed
+        #with self.graph.as_default():
+        sess = self.sess
+        wt = sess.run(self.Wt)
+        c = sess.run(self.c)
+        self.reconstructed = sess.run(tf.sigmoid(encoded.dot(wt) + c))
+        return self.reconstructed
+
+    def get_autoencoded(self, input):
+        encoded = self.get_encoded(input)
+        self.reconstructed = self.get_reconstructed(encoded)
+        return self.reconstructed
+
+    def get_W(self):
+        sess = self.sess
+        return sess.run(self.W)
